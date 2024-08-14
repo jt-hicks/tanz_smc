@@ -1,0 +1,23 @@
+library(excel.link)
+library(zoo)
+library(plyr)
+library(dplyr)
+library(ggpubr)
+library(binom)
+library(gridExtra)
+library(ggplot2)
+library(viridis)
+library(lubridate)
+library(hipercow)
+windows_authenticate()
+
+hipercow_provision()
+hipercow_environment_create(packages=c('dplyr'))
+resources <- hipercow_resources(cores=1)
+
+id <- orderly2::orderly_run('incoming_data')
+id <- task_create_expr(orderly2::orderly_run('incoming_data'),
+                       resources=resources)
+task_info(id)
+task_status(id)
+task_log_show(id)
