@@ -1,7 +1,11 @@
-orderly2::orderly_shared_resource('addCIs.R')
+orderly2::orderly_shared_resource('addCIs.R','process_tz_data.R')
 source('addCIs.R')
+source('process_tz_data.R')
+orderly2::orderly_dependency("data_quality", "latest()",
+                             c('full_data_dqa1.RDS'))
 #get Tanzania data at admin 2 level
-tanz_data_all_16to22_dist <- read.csv("TZ_ANC_data_district_2016_2022.csv")
+# tanz_data_all_16to22_dist <- read.csv("TZ_ANC_data_district_2016_2022.csv")
+full_data_dqa1 < readRDS('full_data_dqa1.RDS')
 
 ##Get SMC options
 smc_options <- readxl::read_xls('MALARIA CONSORTIUM - TZ data.xls')%>%
@@ -19,6 +23,13 @@ smc_council_list <- smc_options[,c('District','smc_option')]%>%
   mutate(council = gsub(' DC',' District Council',District))%>%
   mutate(council = gsub(' TC',' Town Council',council))%>%
   mutate(council = gsub(' MC',' Municipal Council',council))
+
+tanz_data_all_16to22_dist <-full_data_dqa1%>%
+  ##Remove erroneous time points in HFs in Mbeya, Ruvuma and Mtwara
+  filter(!(filter_var=Council%in%smc_council_list$council&ANC_pos>90))%>%
+  mutate(yearmon=zoo::as.yearmon(paste0(Year,"-",Month),"%Y-%m"))%>%
+  group_by(yearmon,Region,Council)%>%
+  dplyr::summarise(count=n(),positive=sum(ANC_pos, na.rm = TRUE),tested=sum(ANC_test, na.rm=TRUE),total=sum(Total_re_ad, na.rm = TRUE))
 
 tanz_data_smc_16to22_dist <- tanz_data_all_16to22_dist%>%
   mutate(council = gsub(' DC',' District Council',Council))%>%
@@ -66,19 +77,20 @@ tanz_data_smc_16to22_dist_outliers <- tanz_data_smc_16to22_dist %>%
          prev_gt3xunwtmean_both = (prev_gt3xunwtmean&prev_gt3xunwtmean_6m))
 
 ##Visualize outliers
-# outliers_trend_plot <- ggplot(tanz_data_smc_16to22_dist_outliers)+
-#   geom_vline(xintercept = as.yearmon(c('Jan 2016','Jan 2017','Jan 2018','Jan 2019','Jan 2020','Jan 2021','Jan 2022')),linetype='dashed',color='#999999')+
-#   geom_line(aes(x=as.yearmon(yearmon),y=mean))+
-#   geom_point(aes(x=as.yearmon(yearmon),y=mean,color=prev_gt3xwtmean_both))+
-#   geom_errorbar(aes(x=as.yearmon(yearmon),ymin=lower,ymax=upper,color=prev_gt3xwtmean_both))+
-#   facet_wrap(Region~District)+
-#   labs(x='Month',y='ANC prevalence',title='SMC Option 1')
+outliers_trend_plot <- ggplot(tanz_data_smc_16to22_dist_outliers)+
+  geom_vline(xintercept = zoo::as.yearmon(c('Jan 2016','Jan 2017','Jan 2018','Jan 2019','Jan 2020','Jan 2021','Jan 2022')),linetype='dashed',color='#999999')+
+  geom_line(aes(x=zoo::as.yearmon(yearmon),y=mean))+
+  geom_point(aes(x=zoo::as.yearmon(yearmon),y=mean,color=prev_gt3xwtmean_both))+
+  geom_errorbar(aes(x=zoo::as.yearmon(yearmon),ymin=lower,ymax=upper,color=prev_gt3xwtmean_both))+
+  facet_wrap(Region~District)+
+  labs(x='Month',y='ANC prevalence',title='SMC Option 1')
+ggplot2::ggsave(filename='outliers_trend_plot.tiff',plot=outliers_trend_plot,width=12,height = 8,units='in')
 
-##Remove points in which prevalence is over 3 times the overall mean and 3 times the 6 month mean
-##(Second part allows peaks in local trends that otherwise look extreme across global data)
-tanz_data_smc_16to22_dist_filtered <- tanz_data_smc_16to22_dist_outliers %>%
+final_data <- tanz_data_smc_16to22_dist_outliers %>%
   ungroup()%>%
-  filter(!prev_gt3xwtmean_both) %>%
   select(1:13)
+final_data_list <- tanz_data_process_allonly(data=final_data,level='District')
 
-saveRDS(tanz_data_smc_16to22_dist_filtered,'tanz_data_smc_16to22_dist.RDS')
+saveRDS(final_data,'tanz_data_smc_16to22_dist.RDS')
+saveRDS(final_data_list,'tanz_data_smc_16to22_dist_list.RDS')
+

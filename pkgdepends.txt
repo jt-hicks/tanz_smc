@@ -17,4 +17,5 @@ mcstate
 orderly2
 readxl
 binom
+ggplot2
 github::jt-hicks/mamasante
